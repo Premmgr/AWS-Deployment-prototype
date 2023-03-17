@@ -1,0 +1,7 @@
+# downloads the demo app from github repo
+- name: downloading application source
+  git:
+    repo: https://github.com/Premmgr/webserver_nginx.git
+    dest: /home/ubuntu/application
+    clone: yes
+    update: yes
