@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 from modules import color, check_os
-import os, sys
+import os
+import sys
+import logging
 
 # global variables
 terraform_path = "terraform"
@@ -20,129 +22,78 @@ lines = '-'*100
 # prints platform
 check_os.check_host_os()
 
+state_files = {'.terraform.lock.hcl',
+               'terraform.tfstate', 'terraform.tfstate.backup'}
+state_dir = {'.terraform'}
+logger = logging.getLogger(__name__)
 
-# terraform actions
-def apply(option):
-    print(f"{color.yellow}{option}_apply{color.ec}", lines)
-    apply_exit = os.system(
-        f'terraform apply -var-file={var_tf} {auto_approve}')
-    if not apply_exit == 0:
-        init("network")
-        retry_exit = os.system(
-            f'terraform apply -var-file={var_tf} {auto_approve}')
-        if not retry_exit == 0:
-            print(
-                f'{color.red}terraform {option} apply error, check {option} configuration section{color.ec}')
-            # prints erro when terraform apply fails
-            return apply_exit
-        
-def init(option):
-    print(f"{color.yellow}{option}_init{color.ec}", lines)
-    init_exit = os.system(f'terraform init -var-file={var_tf}')
-    if not init_exit == 0:
-        # prints erro when terraform init fails
-        print(
-            f'{color.red}terraform {option} init error, check {option} configuration section{color.ec}')
-        return init_exit
-
-def plan(option):
-    print(f"{color.yellow}{option}_plan{color.ec}", lines)
-    plan_exit = os.system(f'terraform plan -var-file={var_tf}')
-    if not plan_exit == 0:
-        # prints erro when terraform init fails
-        print(
-            f'{color.red}terraform {option} plan error, check {option} configuration section{color.ec}')
-        return plan_exit
-
-def destroy(option):
-    print(f"{color.yellow}{option}_destroy{color.ec}", lines)
-    destroy_exit = os.system(
-        f'terraform destroy -var-file={var_tf} {auto_approve}')
-    if not destroy_exit == 0:
-        # prints erro when terraform init fails
-        print(
-            f'{color.red}terraform {option} plan error, check {option} configuration section{color.ec}')
-        return destroy_exit
-    
-def delete_state(option):
-    pass
-    print(f'{color.red}removed statefiles {option}{color.ec}')
-    state_files = ['.terraform.lock.hcl','terraform.tfstate', 'terraform.tfstate.backup', '.terraform/']
-    linux_statefiles = " ".join(state_files)
-    os.system(f'rm -rf {linux_statefiles}')
+# terraform option section
 
 
-# terraform resources deployements
-class Tera:
-    def _init_all():
-        # initiate all configuration
-        # network init
-        os.chdir(f'{terraform_path}/{network_path}')
-        init("network")
-        # secgrp init
-        os.chdir(f'../{secgrp_path}')
-        init("sec-grp")
-        os.chdir(f'../{appserver_path}')
-        init("appserver")
-        print(os.getcwd())
-        print(f'{color.green}init process completed{color.ec}')
+class TeraOption:
+    def __init__(self, option_name, path):
+        self.option_name = option_name
+        self.path = path
+    # pefrom section
 
-    # applied from network path any modification will take effect on next apply or update option
-    def _network_apply():
-        os.chdir(f'{current_path}/{terraform_path}/{network_path}')
-        plan(option="network")
-        apply(option="network")
-    # destroys network resources (all configuration will be reverted related to networks)
-    def _network_destroy():
-        os.chdir(f'{current_path}/{terraform_path}/{network_path}')
-        destroy(option="network")
-    # remove security group from 
-    def _secgrp_apply():
-        os.chdir(f'{current_path}/{terraform_path}/{secgrp_path}')
-        plan(option="sec-grp")
-        apply(option="sec-grp")
+    def perfom(self, action=None):
+        os.chdir(f'{terraform_path}/{self.path}')
+        if action == None:
+            print(f'{color.red}No action provided for {self.option_name}{color.ec}')
+            return sys.exit(1)
+        elif self.option_name == None:
+            print(f'{color.red}No option_name provided{color.ec}')
+            return sys.exit(1)
 
-    def _secgrp_destroy():
-        os.chdir(f'{current_path}/{terraform_path}/{secgrp_path}')
-        destroy(option="seg-grp")
+        elif action == "init":
+            print(f"{color.yellow}{self.option_name}_{action}{color.ec}", lines)
+            exit_code = os.system(f'terraform {action} -var-file={var_tf}')
+            if not exit_code == 0:
+                print(f'{color.red}{self.option_name} {action} eror {color.ec}')
 
-    def _appserver_apply():
-        os.chdir(f'{current_path}/{terraform_path}/{appserver_path}')
-        plan(option="appserver")
-        apply(option="appserver")
+        elif action == "clean":
+            no_file_found = f'{color.yellow}no static files and directory are found, so not removed {self.option_name}{color.ec}'
+            print(f'\nclearing statefiles for {self.option_name}')
+            for file in state_files:
+                try:
+                    os.remove(file)
+                    logger.info(f'removed {file} form {self.option_name}')
+                except FileNotFoundError:
+                    logger.warning(
+                        f'{color.green}{file} not present, so not deleted{color.ec}')
+            for dir in state_dir:
+                try:
+                    os.system(f'rm -rf {dir}')
+                except FileNotFoundError:
+                    logger.warning(f'{dir} not found')
 
-    def _appserver_destroy():
-        os.chdir(f'{current_path}/{terraform_path}/{appserver_path}')
-        destroy(option="appserver")
+        else:
+            print(f"{color.yellow}{self.option_name}_{action}{color.ec}", lines)
+            exit_code = os.system(
+                f'terraform {action} -var-file={var_tf} {auto_approve}')
+            if not exit_code == 0:
+                print(f'{color.red}{self.option_name} {action} eror {color.ec}')
+        # reset path
+        os.chdir(current_path)
 
-    def _delete_all_statefile():
 
-        # clear appserver statefiles
-        os.chdir(f'{current_path}/{terraform_path}/{appserver_path}')
-        delete_state(option="app-server")
+network = TeraOption(option_name="network", path=network_path)
+security = TeraOption(option_name="security_group", path=secgrp_path)
+appserver = TeraOption(option_name="appserver", path=appserver_path)
 
-        # clear ansible statefiles
-        os.chdir(f'{current_path}/{terraform_path}/{ansible_path}')
-        delete_state(option="ansible")
+# end of terraform option
 
-        # clear secgrp stagefiles
-        os.chdir(f'{current_path}/{terraform_path}/{secgrp_path}')
-        delete_state(option="sec-grp")
-        
-        # clear network statefiles
-        os.chdir(f'{current_path}/{terraform_path}/{network_path}')
-        delete_state(option="network")
-        
 # ansible section
 # hostfile required if ansible apply options is used (uses hotfile to connect and execute all playbooks)
+
 
 class Ansible:
     def apply():
         os.chdir(f'{terraform_path}/{ansible_path}')
-        init("ansible-resource")
-        apply("ansible-host-extract")
+        network.perfom(action="init")
         print(f'{color.magenta}running provisioner..{color.ec}')
-        os.system(f'ansible-playbook -i {appserver_ansible_host_file} --private-key ../{appserver_ssh_key} -u {appserver_ssh_user} provisioner_apply.yml')
+        os.system(
+            f'ansible-playbook -i {appserver_ansible_host_file} --private-key ../{appserver_ssh_key} -u {appserver_ssh_user} provisioner_apply.yml')
         # ansible-playbook -i hosts  --private-key ../server-key.pem  -u ubuntu provisioner_apply.yml
         # prvosion app server with ansible playbooks
 
@@ -151,31 +102,35 @@ class Ansible:
         pass
 
 
+def server_ip(self, filename="hosts"):
+    # for ip address uses hosts file to extract ip
+    os.chdir(f'{terraform_path}/{ansible_path}')
+    with open(f"{filename}, 'r'") as f:
+        return f.read
+
+
 class SSH:
-    def exec():
-        # for ip address uses hosts file to extract ip
-        os.chdir(f'{terraform_path}/{ansible_path}')
-        with open('hosts', 'r') as f:
-            server_ip = f.read()
+    def __init__(self, user_name, ip):
+        self.user_name = user_name
+        self.ip = ip
+
+    def exec(self):
         cmd = input("exec command or script: ")
         print(f'\n{color.green}executing..{color.ec}')
-        os.system(f'ssh -i ../{appserver_ssh_key} ubuntu@{server_ip} "{cmd}"')
+        os.system(
+            f'ssh -i ../{appserver_ssh_key} {self.user_name}@{server_ip()} "{cmd}"')
 
     def login():
         # for ip address uses hosts file to extract ip
-        os.chdir(f'{terraform_path}/{ansible_path}')
-        with open('hosts', 'r') as f:
-            server_ip = f.read()
         print(f'\n{color.green}connecting..{color.ec}')
-        os.system(f'ssh -i ../{appserver_ssh_key} ubuntu@{server_ip}')
-    
+        os.system(f'ssh -i ../{appserver_ssh_key} ubuntu@{server_ip()}')
+
     def pipeline_exec(cmmand=None):
-        os.chdir(f'{current_path}/{terraform_path}/{ansible_path}')
-        with open('hosts', 'r') as f:
-            server_ip = f.read()
         print(f'\n{color.green}executing..{color.ec}')
-        os.system(f'ssh -i ../{appserver_ssh_key} ubuntu@{server_ip} "{cmmand}"')
-# help sections 
+        os.system(
+            f'ssh -i ../{appserver_ssh_key} ubuntu@{server_ip()} "{cmmand}"')
+
+# help sections
 
 
 class Help:
@@ -202,7 +157,7 @@ class Help:
 {lines}
 {color.yellow}ansible_options{color.ec}:
 --ansible-apply     : applies playbook to aws instance ({color.green}executes on host file only{color.ec})
---ansible-revert    : {color.red}reverts{color.ec} all action applied by --apply option ({color.yellow}limitation on revert function{color.ec})
+--ansible-revert    : {color.red}reverts{color.ec} all action applied by --apply option ({color.yellow}NOT READY{color.ec})
 
 """)
 
@@ -226,19 +181,21 @@ def custom_agrs():
     # deploy args ---------------------------------
 
     if arg1 == "--init-all":
-        Tera._init_all()
+        network.perfom(action="init")
+        security.perfom(action="init")
+        appserver.perfom(action="init")
 
     if arg1 == "--deploy-network":
-        Tera._network_apply()
+        network.perfom(action="apply")
 
     if arg1 == "--deploy-secgrp":
-        Tera._secgrp_apply
+        security.perfom(action="apply")
 
     if arg1 == "--deploy-appserver":
         # deployments
-        Tera._network_apply()
-        Tera._secgrp_apply()
-        Tera._appserver_apply()
+        network.perfom(action="apply")
+        security.perfom(action="apply")
+        appserver.perfom(action="apply")
         os.chdir('../../')
 
         # ansible provisioner
@@ -252,30 +209,30 @@ def custom_agrs():
         start_cmd = "cd application && docker-compose up -d"
         SSH.pipeline_exec(cmmand=start_cmd)
         print(f'{color.green}Application deployed on aws{color.ec}')
-    
+
     if arg1 == "--update":
-        Tera._network_apply()
-        Tera._secgrp_apply()
-        Tera._appserver_apply()
+        network.perfom(action="plan")
 
     # destroy args --------------------------------
     if arg1 == "--destroy-appserver":
-        Tera._appserver_destroy()
+        appserver.perfom(action="destroy")
 
     if arg1 == "--destroy-network":
-        Tera._network_destroy()
+        network.perfom(action="destroy")
 
     if arg1 == "--destroy-secgrp":
-        Tera._secgrp_destroy()
+        security.perfom(action="destroy")
 
     if arg1 == "--destroy-all":
-        Tera._appserver_destroy()
-        Tera._secgrp_destroy()
-        Tera._network_destroy()
+        appserver.perfom(action="destroy")
+        network.perfom(action="destroy")
+        security.perfom(action="destroy")
 
     # clear statefiles
     if arg1 == "--clear-statefiles":
-        Tera._delete_all_statefile()
+        network.perfom(action="clean")
+        security.perfom(action="clean")
+        appserver.perfom(action="clean")
 
     # ssh args ------------------------------------
     if arg1 == "--login":
@@ -289,6 +246,7 @@ def custom_agrs():
 
     if arg1 == "--ansible-revert":
         Ansible.revert()
+
 
 # entrypoint --------------------------------------
 if __name__ == "__main__":
