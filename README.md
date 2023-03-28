@@ -1,3 +1,16 @@
+work in progress: 
+
+```local-auto-deployment-infra ```  
+```local-monitoring ```    
+
+```cloud-auto-deployment-infra ```  
+```cloud-monitoring ```  
+
+```local and cloud circle-ci pipelines ```  
+
+
+________________________________________________________________________
+ 
 This repository contains a set of templates and configuration files for webapplication deployment using teraform and ansible.
 
 ________________________________________________________________________  
